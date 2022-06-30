@@ -1,6 +1,8 @@
 # trade-crypto
 trade-crypto is about simple trading of crypto currencies via kraken.  
 
+# disclaimer 
+I am not a trader and this is not a financial tool or advice. This is purely for fun.
 
 # Need: 
 - install with pip very few python libraries. 
