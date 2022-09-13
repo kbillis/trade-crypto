@@ -32,18 +32,18 @@ def explore_price_move():
 
 
 # TODO: 
-def emergency_sale(prev_price, cur_price): 
-    emergency_action = 'all_good'
+def emergency_sale(prev_price, cur_price, emergencyDifference = 0.96): 
+    emergency_action = 0
     
-    if (cur_price<prev_price*1.3): 
-        print('WARNING: all good')
-        emergency_action = "sale_now"
-    elif (cur_price>prev_price*1.3):
-        print('WARNING: all good')        
-        emergency_action = "sale_now"
+    emergencyPriceAction = prev_price*emergencyDifference
+    
+    if (cur_price>emergencyPriceAction): 
+        print(f'Emergency_sale check: All good!!! cp:{cur_price} pp:{prev_price} ep:{emergencyPriceAction}') 
+    elif (cur_price<emergencyPriceAction ): 
+        print(f'Emergency_sale check: Sale now!!! cp:{cur_price} pp:{prev_price} ep:{emergencyPriceAction} :: 2% drop in sort time!! ')        
+        emergency_action = 1 
     else: 
-        print('all good')        
-    
+        sys.exit("WARNING::Emergency_sale check: Issue") 
     return emergency_action
 
 
@@ -51,7 +51,7 @@ def emergency_sale(prev_price, cur_price):
 def working_volume(volumetowork,winning_percentage):
     exchangeFee = 0.007
     winning_percentage = winning_percentage*4
-    print(f' BEBUGGG::: VOULUME Winning percentages is {winning_percentage}')
+    print(f'BEBUG::: VOLUME Winning percentages is {winning_percentage}')
     increasePercentage = winning_percentage - exchangeFee 
     newVolumetowork = volumetowork*increasePercentage + volumetowork
     newVolumetowork = round(newVolumetowork, 5)
@@ -101,7 +101,7 @@ def working_increased_percentage(trend, percentageCheckFromPrevious, percentageC
         percentage_increasement = 1
         print("I will keep the same. you didn't provide anything.")
     
-    if percentageCheckFromAsking > 0.7: 
+    if percentageCheckFromAsking > 0.9: 
         print('looks like you are going to have a good benefit')
         whatToDo = True
         
@@ -122,18 +122,27 @@ def print_now_time():
 # check kraken order that is successful
 def check_kraken_order(kraken, response):
     sleep(2)
+    output= "empty"
     check_order = kraken.query_orders_info(response['txid'][0])
+    checkFrequency=0
     if check_order['status'][0] == 'open' or check_order['status'][0] == 'closed':
         print('Order sent sucessfully')
         print('Status of the order is: ' + check_order['status'][0])
         while (check_order['status'][0] =='open'):
-            sleep(18)
+            checkFrequency += 1
+            if checkFrequency < 40: 
+                sleep(18)
+            elif checkFrequency >= 40: 
+                sleep(120) # this is for security. May cancel the order if this number is very very high! 
             print('check status again')            
             print_now_time()
             check_order = kraken.query_orders_info(response['txid'][0])
             print('checking status of the order: ' + check_order['status'][0])
+            output=check_order['status'][0]
     else:
         die('Order rejected')
+        
+    return output
 
 
 # get price from cryptocompare
@@ -161,12 +170,10 @@ def get_crypto_price_cryptocompare(crypto='ETH', currency='EUR', service='Kraken
 
 # get cryptocurrency price from exchange    
 def get_crypto_price_exchange(crypto='ETH', currency='EUR', service='Kraken', benchmarking_code=False):
-    print('Getting price from exchange')    
     cryptopair = crypto + currency    #'SOLEUR'   ## ETHEUR SOLEUR
     price_realtime = 0
     pair_price = 0
 
-    print(f'DEBUG:: {crypto}, {currency}, {service}, {benchmarking_code}')
     if (benchmarking_code): 
         price_realtime = mysqlTools.get_stored_data()
         return price_realtime
@@ -184,7 +191,8 @@ def get_crypto_price_exchange(crypto='ETH', currency='EUR', service='Kraken', be
             print(f'Unable to obtain cryptocurrency data, exception is: {e}')
             
         price_realtime = float(pair_price['b'][0][0])
-  
+
+    print(f'### Getting price from exchange:: {crypto}, {currency}, {service}, {price_realtime}')
     return price_realtime
 
 
@@ -215,7 +223,7 @@ def execute_kraken_order(priceToUse, action, cryptopair, volume_to_action, bench
     print('You are executing kraken order! ')
     if (benchmarking_code == True or superCheck == 0):
         # store_order_info()
-        print('####execute_kraken_order#### {priceToUse} {action}')
+        print(f'####execute_kraken_order in benchmarking_code#### {priceToUse} {action}')
         print(priceToUse, action, cryptopair, volume_to_action, absolute_min)
         return 'DONE',priceToUse
     
@@ -226,6 +234,8 @@ def execute_kraken_order(priceToUse, action, cryptopair, volume_to_action, bench
         techicaladd = 1 
     elif re.search("BTC", cryptopair) : 
         techicaladd = 10 
+    elif re.search("SOL", cryptopair) : 
+        volume_to_action = round(volume_to_action, 5)
 
     # create api conx
     api = krakenex.API()
@@ -261,8 +271,7 @@ def execute_kraken_order(priceToUse, action, cryptopair, volume_to_action, bench
         except exception as e:
             print(f'Error placing order: {e}')
         sleep(1)
-        check_kraken_order(kraken, response)
-        status = 'DONE'
+        status = check_kraken_order(kraken, response)
     elif (check_price_on_kraken == 1 and action == 'sell'):
         if (price_realtime>=absolute_min): 
             print("execure_order::sell::kraken_price doesn't matter - It is above absolute min! I will sell.")
@@ -277,10 +286,9 @@ def execute_kraken_order(priceToUse, action, cryptopair, volume_to_action, bench
         except exception as e:
             print(f'Error placing order: {e}')
         sleep(2)
-        check_kraken_order(kraken, response)
-        status = 'DONE'        
+        status = check_kraken_order(kraken, response)
     else:
-        print('Requirement to sell not reached')
+        print('Requirement to sell not happen')
 
     # buy it
     if (price_realtime <= priceToUse and action == 'buy'): # 
@@ -295,8 +303,7 @@ def execute_kraken_order(priceToUse, action, cryptopair, volume_to_action, bench
         except exception as e:
             print(f'Error placing order: {e}')
         sleep(1)
-        check_kraken_order(kraken, response)
-        status = 'DONE'
+        status = check_kraken_order(kraken, response)
     elif (check_price_on_kraken == 1 and action == 'buy'):
         if (price_realtime<=absolute_min): 
             print("execure_order::buy::kraken_price doesn't matter - It is above absolute min! I will sell.")
@@ -310,11 +317,9 @@ def execute_kraken_order(priceToUse, action, cryptopair, volume_to_action, bench
         except exception as e:
             print(f'Error placing order: {e}')
         sleep(1)
-        check_kraken_order(kraken, response)
-        status = 'DONE'
+        status = check_kraken_order(kraken, response)
     else:
-        print('Requirement to buy not reached')
-
+        print('Requirement to buy not happen')
 
     if (store_orders == 1): 
         print("Store all info...")
@@ -337,7 +342,7 @@ def working_rate(diffFromGoal,diffFromGoalPrevious,tempo,check_rate=False,benchm
         internal_sleep_rate = 25
     elif (tempo == 'long'): 
         print(f'you are in a long tempo mode')
-        internal_sleep_rate = 75
+        internal_sleep_rate = 150
     elif (tempo == 'fast'): 
         print(f'you are in a fast tempo mode')
         internal_sleep_rate = 8
